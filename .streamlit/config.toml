@@ -1,0 +1,7 @@
+[server]
+# 5000 MB = 5 GB. Ubah sesuai kebutuhan (misal video yang mau kamu kompres cukup besar).
+# Karena ini dipakai sendiri di laptop, angka besar aman -- bebannya cuma RAM laptopmu sendiri.
+maxUploadSize = 5000
+
+[browser]
+gatherUsageStats = false
