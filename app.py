@@ -16,12 +16,13 @@ from backend.pdf_compressor import compress_pdf
 from backend.image_compressor import compress_image
 from backend.ppt_compressor import compress_pptx
 from backend.video_compressor import compress_video
+from backend.audio_compressor import compress_audio
 from backend.image_to_pdf import generate_pdf
 
 
 st.set_page_config(page_title="File Compressor", page_icon="🗜️", layout="centered")
 st.title("🗜️ File Compressor")
-st.caption("Kompresi PDF, gambar, PPTX, dan video — UI dan backend terpisah")
+st.caption("Kompresi PDF, gambar, PPTX, video, dan audio — UI dan backend terpisah")
 
 # Session state initialization
 if "images_to_pdf" not in st.session_state:
@@ -42,6 +43,7 @@ FILE_TYPES = {
     "Gambar (JPG/PNG)": ["jpg", "jpeg", "png"],
     "PowerPoint (PPTX)": ["pptx"],
     "Video": ["mp4", "mov", "avi", "mkv"],
+    "Audio": ["mp3", "wav", "m4a", "aac", "ogg", "flac", "wma"],
 }
 
 # Main tabs
@@ -59,6 +61,21 @@ with tab_compress:
         quality = st.slider("Kualitas JPEG", 10, 100, 70)
     elif file_type == "PowerPoint (PPTX)":
         quality = st.slider("Kualitas gambar dalam slide", 10, 100, 60)
+    elif file_type == "Audio":
+        bitrate_presets = ["64k", "96k", "128k", "192k", "256k", "320k"]
+        bitrate_idx = st.selectbox(
+            "Bitrate",
+            options=range(len(bitrate_presets)),
+            format_func=lambda i: bitrate_presets[i],
+            index=2,  # default 128k
+            key="audio_bitrate_idx",
+        )
+        selected_bitrate = bitrate_presets[bitrate_idx]
+        convert_to_mp3 = st.checkbox(
+            "Konversi ke MP3 (bitrate tetap)",
+            value=False,
+            key="audio_convert_mp3",
+        )
     else:
         crf = st.slider("CRF video (makin besar = makin kecil, kualitas turun)", 18, 35, 28)
 
@@ -78,6 +95,13 @@ with tab_compress:
                         compress_image(input_path, output_path, quality=quality)
                     elif file_type == "PowerPoint (PPTX)":
                         compress_pptx(input_path, output_path, quality=quality)
+                    elif file_type == "Audio":
+                        output_path = compress_audio(
+                            input_path,
+                            output_path,
+                            bitrate=selected_bitrate,
+                            convert_to_mp3=convert_to_mp3,
+                        )
                     else:
                         compress_video(input_path, output_path, crf=crf)
                 except Exception as e:
@@ -93,11 +117,25 @@ with tab_compress:
                 f"(hemat {saved_pct:.1f}%)"
             )
 
+            # Input nama file
+            default_name = os.path.splitext(os.path.basename(output_path))[0]
+            custom_name = st.text_input(
+                "Nama file (tanpa ekstensi)",
+                value=default_name,
+                key=f"download_name_{uploaded_file.name}",
+            )
+            if not custom_name.strip():
+                custom_name = default_name
+
+            # Determine extension from output path
+            _, ext = os.path.splitext(output_path)
+            final_name = custom_name.strip() + ext
+
             with open(output_path, "rb") as f:
                 st.download_button(
                     "⬇️ Download hasil kompresi",
                     data=f.read(),
-                    file_name=os.path.basename(output_path),
+                    file_name=final_name,
                 )
 
 # ==================== TAB 2: IMAGES → PDF (NEW) ====================
@@ -324,10 +362,18 @@ with tab_images_pdf:
 
                     st.success(f"PDF berhasil dibuat! ({len(images)} gambar, {len(pdf_bytes) / 1024:.1f} KB)")
 
+                    pdf_name = st.text_input(
+                        "Nama file PDF (tanpa ekstensi)",
+                        value="images_merged",
+                        key="pdf_download_name",
+                    )
+                    if not pdf_name.strip():
+                        pdf_name = "images_merged"
+
                     st.download_button(
                         "⬇️ Download PDF",
                         data=pdf_bytes,
-                        file_name="images_merged.pdf",
+                        file_name=pdf_name.strip() + ".pdf",
                         mime="application/pdf",
                         use_container_width=True,
                     )

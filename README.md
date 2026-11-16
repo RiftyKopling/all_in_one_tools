@@ -1,6 +1,6 @@
 # All-in-One File Compressor & Image-to-PDF Tool
 
-Aplikasi Streamlit ringan untuk **mengompres file** (PDF, gambar, PowerPoint, video) dan **menggabungkan gambar menjadi PDF** dengan editor bawaan (rotasi & crop).
+Aplikasi Streamlit ringan untuk **mengompres file** (PDF, gambar, PowerPoint, video, dan audio) dan **menggabungkan gambar menjadi PDF** dengan editor bawaan (rotasi & crop).
 
 ---
 
@@ -12,6 +12,7 @@ Aplikasi Streamlit ringan untuk **mengompres file** (PDF, gambar, PowerPoint, vi
 | **Kompres Gambar** | Resize + re-encode JPEG (Pillow). |
 | **Kompres PPTX** | Ekstrak media, kompres gambar di `ppt/media/`, zip ulang (zipfile + Pillow). |
 | **Kompres Video** | Transcode H.264/AAC via `ffmpeg` (butuh ffmpeg di sistem). |
+| **Kompres Audio** | Resize + re-encode audio (MP3, WAV, FLAC, dll) via `ffmpeg` (butuh ffmpeg di sistem). |
 | **Images → PDF (NEW)** | Upload multi-gambar → grid preview → edit per gambar (rotasi 90°/180°, crop X/Y/W/H) → layout 1/halaman atau 2/halaman grid → orientasi portrait/landscape → margin & kualitas → generate & download PDF. |
 
 ---
@@ -20,7 +21,7 @@ Aplikasi Streamlit ringan untuk **mengompres file** (PDF, gambar, PowerPoint, vi
 
 ### 1. Prasyarat
 - **Python 3.9+**
-- **ffmpeg** (hanya untuk kompresi video)
+- **ffmpeg** (untuk kompresi video dan audio)
   - Windows: `winget install Gyan.FFmpeg` atau unduh dari <https://ffmpeg.org/download.html>
   - Linux: `sudo apt install ffmpeg`
   - macOS: `brew install ffmpeg`
@@ -44,6 +45,7 @@ Buka <http://localhost:8501> di browser.
 ---
 
 ## 📂 Struktur Proyek
+
 ```
 all-in-one-tool/
 ├── app.py                 # UI Streamlit (tab: Kompres File | Images → PDF)
@@ -57,6 +59,7 @@ all-in-one-tool/
     ├── image_compressor.py
     ├── ppt_compressor.py
     ├── video_compressor.py
+    ├── audio_compressor.py  # NEW: Logic kompresi audio
     └── image_to_pdf.py    # Logic Images → PDF (edit, layout, generate)
 ```
 
@@ -74,11 +77,12 @@ all-in-one-tool/
    - Layout: `1 gambar per halaman` / `2 gambar per halaman (grid)`
    - Orientasi: `Portrait` / `Landscape`
    - Margin (mm), Kualitas (0–100)
-5. Klik **🔄 Generate PDF** → **⬇️ Download PDF**.
+5. Klik **🔄 Generate PDF** → **⬇️ Download PDF** (nama file bisa diubah sebelum download).
 
 ---
 
 ## ⚙️ Konfigurasi Streamlit (opsional)
+
 Edit `.streamlit/config.toml`:
 ```toml
 [server]
@@ -89,16 +93,18 @@ enableCORS = false
 ---
 
 ## 📦 Dependencies
+
 | Paket | Fungsi |
 |-------|--------|
 | `streamlit` | Web UI framework |
 | `pymupdf` (fitz) | Manipulasi PDF (kompres, ekstrak gambar) |
 | `pillow` | Pemrosesan gambar (resize, crop, rotate, encode) |
-| `ffmpeg` (system) | Transcoding video (CLI) |
+| `ffmpeg` (system) | Transcoding video & audio (CLI) |
 
 ---
 
 ## 🛠️ Development
+
 - Semua logika kompresi & konversi berada di folder `backend/` (pure functions, no UI).
 - UI hanya di `app.py`; memanggil fungsi backend.
 - Tambah fitur baru: buat modul di `backend/`, import di `app.py`.
@@ -116,17 +122,17 @@ print(apply_edits(img, {'rotation':90, 'crop':{}}).size)  # (100,200)
 ---
 
 ## 📄 Lisensi
+
 MIT License – bebas digunakan, dimodifikasi, dan didistribusikan.
 
 ---
 
 ## 🤝 Kontribusi
+
 PR & issue dipersilakan!  
 1. Fork repo  
 2. Buat branch fitur (`git checkout -b fitur/awesome`)  
 3. Commit & push  
 4. Buka Pull Request
-
----
 
 **Dibuat dengan ❤️ menggunakan Python + Streamlit.**
