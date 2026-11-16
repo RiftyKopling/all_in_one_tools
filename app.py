@@ -18,6 +18,7 @@ from backend.ppt_compressor import compress_pptx
 from backend.video_compressor import compress_video
 from backend.audio_compressor import compress_audio
 from backend.image_to_pdf import generate_pdf
+from backend.pdf_cropper import crop_pdf, render_page_preview, get_pdf_info
 
 
 st.set_page_config(page_title="File Compressor", page_icon="🗜️", layout="centered")
@@ -36,6 +37,10 @@ if "pdf_settings" not in st.session_state:
     }
 if "edit_idx" not in st.session_state:
     st.session_state.edit_idx = None
+if "pdf_bytes" not in st.session_state:
+    st.session_state.pdf_bytes = None
+if "compressed_file" not in st.session_state:
+    st.session_state.compressed_file = None  # {"bytes": ..., "ext": ..., "default_name": ...}
 
 
 FILE_TYPES = {
@@ -47,7 +52,7 @@ FILE_TYPES = {
 }
 
 # Main tabs
-tab_compress, tab_images_pdf = st.tabs(["🗜️ Kompres File", "📄 Images → PDF"])
+tab_compress, tab_images_pdf, tab_pdf_crop = st.tabs(["🗜️ Kompres File", "📄 Images → PDF", "✂️ Potong PDF"])
 
 # ==================== TAB 1: KOMPRES FILE (EXISTING) ====================
 with tab_compress:
@@ -117,26 +122,35 @@ with tab_compress:
                 f"(hemat {saved_pct:.1f}%)"
             )
 
-            # Input nama file
-            default_name = os.path.splitext(os.path.basename(output_path))[0]
-            custom_name = st.text_input(
-                "Nama file (tanpa ekstensi)",
-                value=default_name,
-                key=f"download_name_{uploaded_file.name}",
-            )
-            if not custom_name.strip():
-                custom_name = default_name
-
-            # Determine extension from output path
+            # Store compressed file in session state for persistent download UI
             _, ext = os.path.splitext(output_path)
-            final_name = custom_name.strip() + ext
-
+            default_name = os.path.splitext(os.path.basename(output_path))[0]
             with open(output_path, "rb") as f:
-                st.download_button(
-                    "⬇️ Download hasil kompresi",
-                    data=f.read(),
-                    file_name=final_name,
-                )
+                file_bytes = f.read()
+            st.session_state.compressed_file = {
+                "bytes": file_bytes,
+                "ext": ext,
+                "default_name": default_name,
+            }
+
+    # Show download section if file was compressed (outside button block)
+    if st.session_state.compressed_file is not None:
+        cf = st.session_state.compressed_file
+        custom_name = st.text_input(
+            "Nama file (tanpa ekstensi)",
+            value=cf["default_name"],
+            key="download_name_compressed",
+        )
+        if not custom_name.strip():
+            custom_name = cf["default_name"]
+
+        final_name = custom_name.strip() + cf["ext"]
+
+        st.download_button(
+            "⬇️ Download hasil kompresi",
+            data=cf["bytes"],
+            file_name=final_name,
+        )
 
 # ==================== TAB 2: IMAGES → PDF (NEW) ====================
 with tab_images_pdf:
@@ -358,25 +372,9 @@ with tab_images_pdf:
                     with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
                         output_path = tmp.name
 
-                    pdf_bytes = generate_pdf(image_dicts, st.session_state.pdf_settings, output_path)
+                    st.session_state.pdf_bytes = generate_pdf(image_dicts, st.session_state.pdf_settings, output_path)
 
-                    st.success(f"PDF berhasil dibuat! ({len(images)} gambar, {len(pdf_bytes) / 1024:.1f} KB)")
-
-                    pdf_name = st.text_input(
-                        "Nama file PDF (tanpa ekstensi)",
-                        value="images_merged",
-                        key="pdf_download_name",
-                    )
-                    if not pdf_name.strip():
-                        pdf_name = "images_merged"
-
-                    st.download_button(
-                        "⬇️ Download PDF",
-                        data=pdf_bytes,
-                        file_name=pdf_name.strip() + ".pdf",
-                        mime="application/pdf",
-                        use_container_width=True,
-                    )
+                    st.success(f"PDF berhasil dibuat! ({len(images)} gambar, {len(st.session_state.pdf_bytes) / 1024:.1f} KB)")
 
                     # Cleanup temp file
                     try:
@@ -387,5 +385,102 @@ with tab_images_pdf:
                 except Exception as e:
                     st.error(f"Gagal membuat PDF: {e}")
 
+        # Show download section if PDF was generated (outside button block)
+        if st.session_state.pdf_bytes is not None:
+            pdf_name = st.text_input(
+                "Nama file PDF (tanpa ekstensi)",
+                value="images_merged",
+                key="pdf_download_name",
+            )
+            if not pdf_name.strip():
+                pdf_name = "images_merged"
+
+            st.download_button(
+                "⬇️ Download PDF",
+                data=st.session_state.pdf_bytes,
+                file_name=pdf_name.strip() + ".pdf",
+                mime="application/pdf",
+                use_container_width=True,
+            )
+
     else:
         st.info("Upload minimal satu gambar untuk memulai.")
+
+# ==================== TAB 3: POTONG PDF (CROP) ====================
+with tab_pdf_crop:
+    st.header("✂️ Potong PDF")
+    st.caption("Potong tepi halaman PDF — cocok untuk hapus watermark CamScanner di bagian bawah")
+
+    uploaded_pdf = st.file_uploader("Upload PDF", type=["pdf"], key="pdf_crop_uploader")
+
+    if uploaded_pdf:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            input_path = os.path.join(tmp_dir, uploaded_pdf.name)
+            with open(input_path, "wb") as f:
+                f.write(uploaded_file.getbuffer() if False else uploaded_pdf.getbuffer())
+
+            info = get_pdf_info(input_path)
+            st.info(f"{info['page_count']} halaman • Ukuran halaman: {info['first_page_size'][0]:.0f} × {info['first_page_size'][1]:.0f} pt")
+
+            # Crop controls
+            st.markdown("**Persentase crop dari setiap tepi**")
+            col1, col2 = st.columns(2)
+            with col1:
+                top_pct = st.slider("Atas (%)", 0, 50, 0, 1)
+                bottom_pct = st.slider("Bawah (%)", 0, 50, 8, 1)
+            with col2:
+                left_pct = st.slider("Kiri (%)", 0, 50, 0, 1)
+                right_pct = st.slider("Kanan (%)", 0, 50, 0, 1)
+
+            # Preview before/after
+            st.markdown("**Pratinjau halaman 1**")
+            prev_col1, prev_col2 = st.columns(2)
+            with prev_col1:
+                st.markdown("*Sebelum*")
+                img_before = render_page_preview(input_path, 0, dpi=100)
+                st.image(img_before, use_container_width=True)
+            with prev_col2:
+                st.markdown("*Sesudah*")
+                img_after = render_page_preview(input_path, 0, dpi=100,
+                                                crop_pcts=(top_pct, bottom_pct, left_pct, right_pct))
+                st.image(img_after, use_container_width=True)
+
+            # Generate button
+            if st.button("✂️ Potong PDF", type="primary", use_container_width=True):
+                with st.spinner("Memotong PDF..."):
+                    try:
+                        output_path = os.path.join(tmp_dir, "cropped_" + uploaded_pdf.name)
+                        crop_pdf(input_path, output_path,
+                                 top_pct=top_pct, bottom_pct=bottom_pct,
+                                 left_pct=left_pct, right_pct=right_pct)
+
+                        with open(output_path, "rb") as f:
+                            cropped_bytes = f.read()
+
+                        st.session_state.cropped_pdf = {
+                            "bytes": cropped_bytes,
+                            "ext": ".pdf",
+                            "default_name": "cropped_" + os.path.splitext(uploaded_pdf.name)[0],
+                        }
+                        st.success(f"PDF berhasil dipotong! ({len(cropped_bytes) / 1024:.1f} KB)")
+                    except Exception as e:
+                        st.error(f"Gagal memotong PDF: {e}")
+
+    # Show download section if PDF was cropped (outside button block)
+    if st.session_state.get("cropped_pdf") is not None:
+        cp = st.session_state.cropped_pdf
+        crop_name = st.text_input(
+            "Nama file PDF (tanpa ekstensi)",
+            value=cp["default_name"],
+            key="cropped_pdf_name",
+        )
+        if not crop_name.strip():
+            crop_name = cp["default_name"]
+
+        st.download_button(
+            "⬇️ Download PDF hasil crop",
+            data=cp["bytes"],
+            file_name=crop_name.strip() + cp["ext"],
+            mime="application/pdf",
+            use_container_width=True,
+        )
