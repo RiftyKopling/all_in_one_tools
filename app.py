@@ -19,6 +19,7 @@ from backend.video_compressor import compress_video
 from backend.audio_compressor import compress_audio
 from backend.image_to_pdf import generate_pdf
 from backend.pdf_cropper import crop_pdf, render_page_preview, get_pdf_info
+from backend.qr_generator import generate_qr
 
 
 st.set_page_config(page_title="File Compressor", page_icon="🗜️", layout="centered")
@@ -52,7 +53,12 @@ FILE_TYPES = {
 }
 
 # Main tabs
-tab_compress, tab_images_pdf, tab_pdf_crop = st.tabs(["🗜️ Kompres File", "📄 Images → PDF", "✂️ Potong PDF"])
+tab_compress, tab_images_pdf, tab_pdf_crop, tab_qr = st.tabs([
+    "🗜️ Kompres File",
+    "📄 Images → PDF",
+    "✂️ Potong PDF",
+    "📱 QR Generator",
+])
 
 # ==================== TAB 1: KOMPRES FILE (EXISTING) ====================
 with tab_compress:
@@ -484,3 +490,88 @@ with tab_pdf_crop:
             mime="application/pdf",
             use_container_width=True,
         )
+
+# ==================== TAB 4: QR GENERATOR ====================
+with tab_qr:
+    st.header("📱 QR Generator")
+    st.caption("Generate QR code statis dari teks/URL apa pun")
+
+    # Input data
+    qr_data = st.text_area(
+        "Teks atau URL yang ingin Anda encode",
+        height=100,
+        placeholder="https://example.com atau teks biasa...",
+    )
+
+    # Options in columns
+    opt_col1, opt_col2 = st.columns(2)
+    with opt_col1:
+        box_size = st.slider("Ukuran kotak (module)", 5, 20, 10, 1)
+        border = st.slider("Border (quiet zone)", 1, 10, 4, 1)
+        fill_color = st.color_picker("Warna QR", "#000000")
+    with opt_col2:
+        back_color = st.color_picker("Warna background", "#FFFFFF")
+        # Preset colors
+        preset_colors = st.selectbox(
+            "Preset warna (opsional)",
+            ["Custom"] + ["Black on White", "White on Black", "Blue on Yellow", "Green on White"],
+        )
+        if preset_colors != "Custom":
+            if preset_colors == "Black on White":
+                fill_color, back_color = "black", "white"
+            elif preset_colors == "White on Black":
+                fill_color, back_color = "white", "black"
+            elif preset_colors == "Blue on Yellow":
+                fill_color, back_color = "blue", "yellow"
+            elif preset_colors == "Green on White":
+                fill_color, back_color = "green", "white"
+
+    # Generate button
+    if st.button("🔄 Generate QR Code", type="primary", use_container_width=True):
+        if not qr_data.strip():
+            st.warning("Masukkan teks atau URL terlebih dahulu")
+        else:
+            with st.spinner("Membuat QR code..."):
+                try:
+                    qr_img = generate_qr(
+                        qr_data,
+                        box_size=box_size,
+                        border=border,
+                        fill_color=fill_color,
+                        back_color=back_color,
+                    )
+
+                    # Store in session state for download
+                    import io
+                    img_bytes = io.BytesIO()
+                    qr_img.save(img_bytes, format="PNG")
+                    st.session_state.qr_bytes = img_bytes.getvalue()
+
+                    st.success("QR code berhasil dibuat!")
+                except Exception as e:
+                    st.error(f"Gagal membuat QR code: {e}")
+
+    # Download section
+    if "qr_bytes" in st.session_state and st.session_state.qr_bytes:
+        st.divider()
+        qr_name = st.text_input(
+            "Nama file QR (tanpa ekstensi)",
+            value="qr_code",
+            key="qr_download_name",
+        )
+        if not qr_name.strip():
+            qr_name = "qr_code"
+
+        st.download_button(
+            "⬇️ Download QR Code",
+            data=st.session_state.qr_bytes,
+            file_name=qr_name.strip() + ".png",
+            mime="image/png",
+            use_container_width=True,
+        )
+
+    # Preview (if QR generated)
+    if "qr_bytes" in st.session_state and st.session_state.qr_bytes:
+        st.divider()
+        st.subheader("Pratinjau QR Code")
+        st.image(st.session_state.qr_bytes, use_container_width=True)
